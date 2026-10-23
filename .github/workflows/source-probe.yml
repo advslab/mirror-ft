@@ -1,0 +1,46 @@
+name: source probe
+
+# Manual only. Checks from a runner whether the advisory sites answer and how
+# fast: the feed, list page 1, one document from the feed's link, one at the
+# address built from a list title, then 6 more paced documents; reports
+# latency, every non-200 answer and every 200 that is not what was asked for.
+# Stores nothing.
+# Set the repository secrets SOURCE_BASE (the list page's URL), RSS_URL (the
+# feed) and CSAF_BASE (the documents' root with a trailing slash)
+# (Settings → Secrets and variables → Actions → Secrets); they are masked in every log.
+on:
+  workflow_dispatch:
+    inputs:
+      pace:
+        description: "seconds between requests"
+        required: false
+        default: "1"
+      more:
+        description: "paced documents after the first four calls (default 6)"
+        required: false
+        default: ""
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: refuse without the source secrets
+        env:
+          BASE: ${{ secrets.SOURCE_BASE }}
+          RSS_URL: ${{ secrets.RSS_URL }}
+          CSAF_BASE: ${{ secrets.CSAF_BASE }}
+        run: |
+          if [ -z "$BASE" ] || [ -z "$RSS_URL" ] || [ -z "$CSAF_BASE" ]; then echo "::error::repository secrets SOURCE_BASE, RSS_URL and CSAF_BASE must all be set"; exit 1; fi
+      - name: probe
+        env:
+          BASE: ${{ secrets.SOURCE_BASE }}
+          RSS_URL: ${{ secrets.RSS_URL }}
+          CSAF_BASE: ${{ secrets.CSAF_BASE }}
+          PACE: ${{ inputs.pace }}
+          MORE: ${{ inputs.more }}
+        run: |
+          chmod +x bin/source-probe
+          sha256sum bin/source-probe
+          bin/source-probe
