@@ -1,0 +1,46 @@
+name: lifecycle sync
+
+# Copies the vendor's product lifecycle tables into a second rolling
+# release (tag `lifecycle`), apart from the advisories' `data` release: one
+# gzipped JSON-lines file per table type (hardware, software, services),
+# each line the table's category and note beside the raw row, indexed by
+# state.json (per unit: complete, rows, sha256, size, the source's last
+# update date, copy time). A table the source does not answer for, or that
+# shrank below 90% of the copy held, keeps its previous file with the
+# reason noted; an unchanged table is not uploaded again. Once a day.
+#
+# Set the repository secret LIFECYCLE_ENDPOINT to the URL that answers the
+# lifecycle POST (Settings → Secrets and variables → Actions → Secrets); it is masked in every log.
+on:
+  schedule:
+    - cron: "40 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lifecycle
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: refuse without the source secret
+        env:
+          ENDPOINT: ${{ secrets.LIFECYCLE_ENDPOINT }}
+        run: |
+          if [ -z "$ENDPOINT" ]; then echo "::error::repository secret LIFECYCLE_ENDPOINT is not set"; exit 1; fi
+      - name: sync
+        env:
+          ENDPOINT: ${{ secrets.LIFECYCLE_ENDPOINT }}
+          RELEASE_TAG: lifecycle
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          chmod +x bin/lifecycle-sync
+          sha256sum bin/lifecycle-sync
+          bin/lifecycle-sync
